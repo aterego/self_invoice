@@ -16,8 +16,6 @@ if (empty($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(32)); }
       <div class="brand">
         <img src="logo.png" alt="Logo" class="logo" onerror="this.style.display='none'">
       </div>
-  <h1>Self-Invoice</h1>
-
       <h1>Self-Invoice</h1>
       <p class="muted">Rates are <b>tax-inclusive</b>. We’ll split out Ontario HST (13%).</p>
 
@@ -31,14 +29,14 @@ if (empty($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(32)); }
         <input type="hidden" id="js_ok" name="js_ok" value="">
 
         <div class="row">
-          <label>Your Name*<input required name="your_name" type="text" autocomplete="off" spellcheck="false"></label>
-          <label>Invoice Date*<input required name="invoice_date" type="date" autocomplete="off"></label>
-          <label>Your HST #*<input required name="your_hst" type="text" autocomplete="off" spellcheck="false"></label>
+          <label>Your Name*<input required name="your_name" type="text" autocomplete="off" spellcheck="false"><small class="error-msg"></small></label>
+          <label>Invoice Date*<input required name="invoice_date" type="date" autocomplete="off"><small class="error-msg"></small></label>
+          <label>Your HST #*<input required name="your_hst" type="text" autocomplete="off" spellcheck="false"><small class="error-msg"></small></label>
         </div>
 
         <div class="row">
-          <label>Your Address*<input required name="your_address" type="text" autocomplete="off" spellcheck="false"></label>
-          <label>Your Phone*<input required name="your_phone" type="tel" autocomplete="off" inputmode="tel"></label>
+          <label>Your Address*<input required name="your_address" type="text" autocomplete="off" spellcheck="false"><small class="error-msg"></small></label>
+          <label>Your Phone*<input required name="your_phone" type="tel" autocomplete="off" inputmode="tel"><small class="error-msg"></small></label>
           <label>Your Email (copy to you)<input name="your_email" type="email" autocomplete="off"></label>
         </div>
 

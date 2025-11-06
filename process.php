@@ -1,6 +1,6 @@
 <?php
 require __DIR__.'/config.php';
-require __DIR__.'/mailer.php'; // your existing PHPMailer wrapper
+require __DIR__.'/mailer.php'; // your PHPMailer wrapper
 
 // ---------- BOT GUARDS ----------
 if (session_status() === PHP_SESSION_NONE) { session_start(); }
@@ -28,7 +28,8 @@ $events[] = $now;
 if (count($events) > $limit) { http_response_code(429); exit('Too many requests'); }
 @file_put_contents($rlFile, implode("\n",$events)."\n", LOCK_EX);
 
-// ---------- INPUT ----------
+
+
 $your_name    = trim((string)($_POST['your_name'] ?? ''));
 $invoice_date = trim((string)($_POST['invoice_date'] ?? ''));
 $your_hst     = trim((string)($_POST['your_hst'] ?? ''));
@@ -47,16 +48,14 @@ if (!is_array($desc) || !is_array($hours) || !is_array($rate) || count($desc) ==
   http_response_code(422); exit('Need at least one line item.');
 }
 
-// ---------- MATH (server-side, tax-inclusive) ----------
+// ---------- MATH (tax-inclusive rates) ----------
 $items = [];
 $total_incl = 0.0;
-
 for ($i=0; $i<count($desc); $i++) {
   $d = trim((string)($desc[$i] ?? ''));
   $h = (float)($hours[$i] ?? 0);
   $r = (float)($rate[$i] ?? 0);
   if ($d === '' || $h <= 0 || $r < 0) continue;
-
   $line_incl = round($h * $r, 2);
   $items[] = ['desc'=>$d, 'hours'=>$h, 'rate_incl'=>$r, 'line_incl'=>$line_incl];
   $total_incl += $line_incl;
@@ -66,12 +65,11 @@ if (empty($items)) { http_response_code(422); exit('No valid line items.'); }
 $subtotal = round($total_incl / (1 + HST_RATE), 2);
 $hst_amt  = round($total_incl - $subtotal, 2);
 
-// ---------- DB SAVE (transaction) ----------
+// ---------- DB SAVE ----------
 $mysqli = db();
 $mysqli->begin_transaction();
-
 try {
-  // Create invoice row
+  // Initial insert with temp invoice_no
   $ua = substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255);
   $stmt = $mysqli->prepare("
     INSERT INTO invoices
@@ -82,15 +80,11 @@ try {
        client_ip, user_agent)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   ");
-
-  // TEMP invoice no placeholder; we'll update after we get ID
   $tmpInvNo = 'PENDING';
-
   $billToName    = BILL_TO_NAME;
   $billToAddress = BILL_TO_ADDRESS;
   $billToPhone   = BILL_TO_PHONE;
   $billToHst     = BILL_TO_HST;
-
   $stmt->bind_param(
     'sssssssssssssdss',
     $tmpInvNo, $invoice_date,
@@ -103,14 +97,12 @@ try {
   $invoice_id = (int)$mysqli->insert_id;
   $stmt->close();
 
-  // Generate final invoice_no like AM-000001
   $invoice_no = sprintf('AM-%06d', $invoice_id);
   $stmt = $mysqli->prepare("UPDATE invoices SET invoice_no=? WHERE id=?");
   $stmt->bind_param('si', $invoice_no, $invoice_id);
   $stmt->execute();
   $stmt->close();
 
-  // Insert items
   $stmt = $mysqli->prepare("
     INSERT INTO invoice_items
       (invoice_id, line_no, description, hours, rate_incl_hst, amount_incl)
@@ -131,14 +123,19 @@ try {
   $mysqli->commit();
 } catch (Throwable $e) {
   $mysqli->rollback();
-  http_response_code(500);
-  exit('Failed to save invoice.');
+  http_response_code(500); exit('Failed to save invoice.');
 }
 
-// ---------- EMAIL (HTML + text alt) ----------
-$to   = array_values(array_filter(array_map('trim', preg_split('/[;,]+/', MAIL_TO_ADDRS))));
-$from = MAIL_FROM_ADDR;
-$subject = 'Invoice '.$invoice_no.' from '.$your_name.' — '.$invoice_date;
+// ---------- EMAIL HTML (with CID logo) ----------
+// before building $pdf_html
+$logoData = '';
+if (is_file(LOGO_FILE)) {
+    $mime = 'image/png'; // change if your logo is jpg/svg
+    $raw  = @file_get_contents(LOGO_FILE);
+    if ($raw !== false) {
+        $logoData = 'data:'.$mime.';base64,'.base64_encode($raw);
+    }
+}
 
 $rows_html = '';
 foreach ($items as $it) {
@@ -149,30 +146,21 @@ foreach ($items as $it) {
     '<td style="padding:6px;border-top:1px solid #eee;text-align:right;">'.money($it['line_incl']).'</td>'.
   '</tr>';
 }
-
-$bill_to_html = '<strong>'.h(BILL_TO_NAME).'</strong><br>'.
-                nl2br(h(BILL_TO_ADDRESS)).'<br>'.
-                'Phone: '.h(BILL_TO_PHONE).'<br>'.
-                'HST: '.h(BILL_TO_HST);
-
-$from_html = '<strong>'.h($your_name).'</strong><br>'.
-             nl2br(h($your_address)).'<br>'.
-             'Phone: '.h($your_phone).'<br>'.
-             'HST: '.h($your_hst).($your_email ? '<br>Email: '.h($your_email) : '');
+$bill_to_html = '<strong>'.h(BILL_TO_NAME).'</strong><br>'.nl2br(h(BILL_TO_ADDRESS)).'<br>Phone: '.h(BILL_TO_PHONE).'<br>HST: '.h(BILL_TO_HST);
+$from_html = '<strong>'.h($your_name).'</strong><br>'.nl2br(h($your_address)).'<br>Phone: '.h($your_phone).'<br>HST: '.h($your_hst).($your_email ? '<br>Email: '.h($your_email) : '');
 
 $message_html = '
 <!doctype html><html><body style="background:#f7f7f7;padding:16px;margin:0;">
   <div style="max-width:760px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#111827;">
-    <h2 style="margin:0 0 12px;">Invoice '.$invoice_no.'</h2>
+    <div style="display:table;align-items:center;gap:10px;margin-bottom:6px">'.$logoData.'<span style="font-size:20px;font-weight:700">Invoice '.$invoice_no.'</span></div>
+
     <table width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;border-collapse:collapse">
       <tr>
         <td style="vertical-align:top;width:50%;padding-right:10px">
-          <h3 style="margin:0 0 6px;font-size:16px;">From</h3>
-          '.$from_html.'
+          <h3 style="margin:0 0 6px;font-size:16px;">From</h3>'.$from_html.'
         </td>
         <td style="vertical-align:top;width:50%;padding-left:10px">
-          <h3 style="margin:0 0 6px;font-size:16px;">Bill To</h3>
-          '.$bill_to_html.'
+          <h3 style="margin:0 0 6px;font-size:16px;">Bill To</h3>'.$bill_to_html.'
         </td>
       </tr>
       <tr><td colspan="2" style="padding-top:10px;color:#6b7280">Invoice Date: '.h($invoice_date).'</td></tr>
@@ -210,11 +198,103 @@ foreach ($items as $it) {
 }
 $message_text .= "\nSubtotal: ".money($subtotal)."\nHST(13%): ".money($hst_amt)."\nTotal: ".money($total_incl)."\n";
 
-// Send to admins
-send_mail($to, $subject, $message_html, MAIL_FROM_ADDR, 'Invoices Bot', [], [], [], true, $message_text);
-// Optional copy to user
+// ---------- PDF GENERATION (Dompdf) ----------
+$pdfPath = null;
+// Try Composer autoload first, then a manual dompdf directory
+$autoloads = [__DIR__.'/vendor/autoload.php', __DIR__.'/dompdf/autoload.inc.php'];
+foreach ($autoloads as $a) { if (file_exists($a)) { require_once $a; break; } }
+
+if (class_exists('\\Dompdf\\Dompdf')) {
+    $logoPdf = (is_file(LOGO_FILE)) ? 'file://' . realpath(LOGO_FILE) : '';
+    $pdf_html = '
+    <!doctype html><html><head><meta charset="utf-8">
+    <style>
+      body{font-family:DejaVu Sans,Arial,Helvetica,sans-serif;color:#111}
+      .wrap{padding:10px 14px}
+      .head{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+      .head img{height:42px}
+      h1{font-size:20px;margin:0}
+      table{width:100%;border-collapse:collapse;font-size:12px}
+      th,td{padding:6px;border-bottom:1px solid #ddd}
+      th{text-align:left;border-bottom:2px solid #000}
+      .cols{width:100%}
+      .col{width:50%;vertical-align:top}
+      .muted{color:#555}
+      .totals td{border:0;padding:4px 6px}
+      .totals .top{border-top:1px solid #ddd}
+    </style></head><body><div class="wrap">
+    <div class="head">
+      '.($logoData ? '<img src="'.$logoData.'" alt="logo">' : '').'
+      <h1>Invoice '.$invoice_no.'</h1>
+    </div>
+
+
+      <table class="cols">
+        <tr>
+          <td class="col">
+            <strong>From</strong><br>'.
+            h($your_name).'<br>'.
+            nl2br(h($your_address)).'<br>'.
+            'Phone: '.h($your_phone).'<br>'.
+            'HST: '.h($your_hst).($your_email ? '<br>Email: '.h($your_email) : '').
+          '</td>
+          <td class="col">
+            <strong>Bill To</strong><br>'.
+            h(BILL_TO_NAME).'<br>'.
+            nl2br(h(BILL_TO_ADDRESS)).'<br>'.
+            'Phone: '.h(BILL_TO_PHONE).'<br>'.
+            'HST: '.h(BILL_TO_HST).'
+          </td>
+        </tr>
+        <tr><td colspan="2" class="muted">Invoice Date: '.h($invoice_date).'</td></tr>
+      </table>
+
+      <h3>Items</h3>
+      <table>
+        <thead><tr>
+          <th>Description</th><th style="text-align:right">Hours</th><th style="text-align:right">Rate (incl HST)</th><th style="text-align:right">Amount</th>
+        </tr></thead><tbody>';
+
+    foreach ($items as $it) {
+      $pdf_html .= '<tr>'.
+        '<td>'.h($it['desc']).'</td>'.
+        '<td style="text-align:right">'.number_format($it['hours'],2).'</td>'.
+        '<td style="text-align:right">'.money($it['rate_incl']).'</td>'.
+        '<td style="text-align:right">'.money($it['line_incl']).'</td>'.
+      '</tr>';
+    }
+
+    $pdf_html .= '</tbody></table>
+      <table class="totals" style="margin-top:8px">
+        <tr><td style="text-align:right;width:80%"><span class="muted">Subtotal (excl. HST)</span></td><td style="text-align:right">'.money($subtotal).'</td></tr>
+        <tr><td style="text-align:right"><span class="muted">HST (13%)</span></td><td style="text-align:right">'.money($hst_amt).'</td></tr>
+        <tr><td class="top" style="text-align:right;font-weight:bold">Total</td><td class="top" style="text-align:right;font-weight:bold">'.money($total_incl).'</td></tr>
+      </table>
+    </div></body></html>';
+
+    $options = new \Dompdf\Options();
+    $options->set('isRemoteEnabled', true);
+    $dompdf = new \Dompdf\Dompdf($options);
+    $dompdf->loadHtml($pdf_html, 'UTF-8');
+    $dompdf->setPaper('letter', 'portrait');
+    $dompdf->render();
+
+    $outDir = __DIR__ . '/pdf/invoices';
+    if (!is_dir($outDir)) { @mkdir($outDir, 0755, true); }
+    $pdfPath = $outDir . '/' . $invoice_no . '.pdf';
+    file_put_contents($pdfPath, $dompdf->output());
+}
+
+// ---------- SEND MAIL (with CID logo + PDF attach) ----------
+$to        = array_values(array_filter(array_map('trim', preg_split('/[;,]+/', MAIL_TO_ADDRS))));
+$subject   = 'Invoice '.$invoice_no.' from '.$your_name.' — '.$invoice_date;
+$embeds    = is_file(LOGO_FILE) ? [['path'=>LOGO_FILE, 'cid'=>'invoice_logo', 'name'=>'logo.png']] : [];
+$attachArr = ($pdfPath && is_file($pdfPath)) ? [$pdfPath] : [];
+
+send_mail($to, $subject, $message_html, MAIL_FROM_ADDR, 'Invoices Bot', [], [], $attachArr, true, $message_text, $embeds);
+
 if ($your_email && filter_var($your_email, FILTER_VALIDATE_EMAIL)) {
-  send_mail($your_email, 'Copy: '.$subject, $message_html, MAIL_FROM_ADDR, 'Invoices Bot', [], [], [], true, $message_text);
+  send_mail($your_email, 'Copy: '.$subject, $message_html, MAIL_FROM_ADDR, 'Invoices Bot', [], [], $attachArr, true, $message_text, $embeds);
 }
 
 // ---------- Thank you ----------

@@ -34,5 +34,27 @@ table.items input{width:100%}
 .btn[aria-busy="true"]::after{content:"";width:14px;height:14px;margin-left:8px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite;display:inline-block;vertical-align:-2px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .brand{display:flex;align-items:center;margin-bottom:8px}
-.logo{height:44px}
+.logo{width:180px}
+/* --- validation --- */
+.field, .cell{display:flex;flex-direction:column;gap:6px}
+.error-msg{min-height:14px;font-size:12px;color:#dc2626}
+.invalid input, .invalid textarea, .invalid select{border-color:#dc2626;background:#fff7f7}
+/* === Validation (scoped to the invoice form) === */
+#invoiceForm .field,
+#invoiceForm .cell { display:flex; flex-direction:column; gap:6px; }
 
+#invoiceForm .err-msg { min-height:14px; font-size:12px; color:#dc2626; }
+
+#invoiceForm .has-error input,
+#invoiceForm .has-error textarea,
+#invoiceForm .has-error select {
+  border-color:#dc2626;
+  background:#fff7f7;
+}
+
+/* Optional: keep the nice totals/headers untouched */
+#invoiceForm .totals,
+#invoiceForm h1,
+#invoiceForm h2,
+#invoiceForm h3,
+#invoiceForm label { color: inherit; }
