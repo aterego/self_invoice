@@ -136,6 +136,7 @@ if (is_file(LOGO_FILE)) {
         $logoData = 'data:'.$mime.';base64,'.base64_encode($raw);
     }
 }
+$logoCidTag = (is_file(LOGO_FILE)) ? '<img src="cid:invoice_logo" style="height:90px;vertical-align:middle;margin-right:10px">' : '';
 
 $rows_html = '';
 foreach ($items as $it) {
@@ -152,7 +153,7 @@ $from_html = '<strong>'.h($your_name).'</strong><br>'.nl2br(h($your_address)).'<
 $message_html = '
 <!doctype html><html><body style="background:#f7f7f7;padding:16px;margin:0;">
   <div style="max-width:760px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#111827;">
-    <div style="display:table;align-items:center;gap:10px;margin-bottom:6px">'.$logoData.'<span style="font-size:20px;font-weight:700">Invoice '.$invoice_no.'</span></div>
+    <div style="display:table;align-items:center;gap:10px;margin-bottom:6px">'.$logoCidTag.'<span style="font-size:20px;font-weight:700">Invoice '.$invoice_no.'</span></div>
 
     <table width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;border-collapse:collapse">
       <tr>
@@ -205,14 +206,13 @@ $autoloads = [__DIR__.'/vendor/autoload.php', __DIR__.'/dompdf/autoload.inc.php'
 foreach ($autoloads as $a) { if (file_exists($a)) { require_once $a; break; } }
 
 if (class_exists('\\Dompdf\\Dompdf')) {
-    $logoPdf = (is_file(LOGO_FILE)) ? 'file://' . realpath(LOGO_FILE) : '';
     $pdf_html = '
     <!doctype html><html><head><meta charset="utf-8">
     <style>
       body{font-family:DejaVu Sans,Arial,Helvetica,sans-serif;color:#111}
       .wrap{padding:10px 14px}
       .head{display:flex;align-items:center;gap:12px;margin-bottom:8px}
-      .head img{height:42px}
+      .head img{height:92px}
       h1{font-size:20px;margin:0}
       table{width:100%;border-collapse:collapse;font-size:12px}
       th,td{padding:6px;border-bottom:1px solid #ddd}
