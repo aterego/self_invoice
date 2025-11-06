@@ -54,7 +54,7 @@ if (empty($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(32)); }
           </thead>
           <tbody id="itemsBody">
             <tr>
-              <td><input name="desc[]"  type="text" placeholder="e.g., Moving labour" required autocomplete="off"></td>
+              <td><input name="desc[]"  type="text" placeholder="e.g., Moving labour" required autocomplete="off" value="Moving Service"></td>
               <td><input name="hours[]" type="number" step="0.01" min="0" required autocomplete="off"></td>
               <td><input name="rate[]"  type="number" step="0.01" min="0" required autocomplete="off"></td>
               <td class="lineTotal">$0.00</td>
