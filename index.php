@@ -4,8 +4,7 @@ if (empty($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(32)); }
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Create Self-Invoice</title>
 <link rel="stylesheet" href="style.css">
 <script defer src="script.js"></script>
@@ -15,9 +14,9 @@ if (empty($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(32)); }
     <div class="card">
       <div class="brand">
         <img src="logo.png" alt="Logo" class="logo" onerror="this.style.display='none'">
-      </div>
+      </div>      
       <h1>Self-Invoice</h1>
-      <p class="muted">Rates are <b>tax-inclusive</b>. We’ll split out Ontario HST (13%).</p>
+      <p class="muted">Rates are <b>per day</b> and <b>tax-inclusive</b>. We’ll split out Ontario HST (13%).</p>
 
       <form id="invoiceForm" class="grid" method="post" action="process.php" autocomplete="off" novalidate>
         <!-- Bot guards -->
@@ -29,24 +28,53 @@ if (empty($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(32)); }
         <input type="hidden" id="js_ok" name="js_ok" value="">
 
         <div class="row">
-          <label>Your Name*<input required name="your_name" type="text" autocomplete="off" spellcheck="false"><small class="error-msg"></small></label>
-          <label>Invoice Date*<input required name="invoice_date" type="date" autocomplete="off"><small class="error-msg"></small></label>
-          <label>Your HST #*<input required name="your_hst" type="text" autocomplete="off" spellcheck="false"><small class="error-msg"></small></label>
+          <label class="field">Your Name*
+            <input required name="your_name" type="text" autocomplete="off" spellcheck="false">
+            <small class="error-msg"></small>
+          </label>
+
+          <label class="field">Start Date*
+            <input required name="start_date" type="date" autocomplete="off">
+            <small class="error-msg"></small>
+          </label>
+
+          <label class="field">End Date*
+            <input required name="end_date" type="date" autocomplete="off">
+            <small class="error-msg"></small>
+          </label>
         </div>
 
         <div class="row">
-          <label>Your Address*<input required name="your_address" type="text" autocomplete="off" spellcheck="false"><small class="error-msg"></small></label>
-          <label>Your Phone*<input required name="your_phone" type="tel" autocomplete="off" inputmode="tel"><small class="error-msg"></small></label>
-          <label>Your Email (copy to you)<input name="your_email" type="email" autocomplete="off"></label>
+          <label class="field">Your HST #*
+            <input required name="your_hst" type="text" autocomplete="off" spellcheck="false">
+            <small class="error-msg"></small>
+          </label>
+
+          <label class="field">Your Address*
+            <input required name="your_address" type="text" autocomplete="off" spellcheck="false">
+            <small class="error-msg"></small>
+          </label>
+
+          <label class="field">Your Phone*
+            <input required name="your_phone" type="tel" autocomplete="off" inputmode="tel">
+            <small class="error-msg"></small>
+          </label>
         </div>
 
-        <h3>Line Items (rate is tax-inclusive)</h3>
+        <div class="row">
+          <label class="field">Your Email (copy to you)
+            <input name="your_email" type="email" autocomplete="off">
+            <small class="error-msg"></small>
+          </label>
+        </div>
+
+        <h3>Line Items (per day, incl. HST)</h3>
 
         <table class="items" aria-describedby="items-help">
           <thead>
             <tr>
               <th style="width:45%">Description</th>
-              <th style="width:15%">Hours</th>
+              <th style="width:15%">Days</th>
               <th style="width:20%">Rate (incl. HST)</th>
               <th style="width:20%">Amount</th>
               <th></th>
@@ -54,9 +82,24 @@ if (empty($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(32)); }
           </thead>
           <tbody id="itemsBody">
             <tr>
-              <td><input name="desc[]"  type="text" placeholder="e.g., Moving labour" required autocomplete="off" value="Moving Service"></td>
-              <td><input name="hours[]" type="number" step="0.01" min="0" required autocomplete="off"></td>
-              <td><input name="rate[]"  type="number" step="0.01" min="0" required autocomplete="off"></td>
+              <td>
+                <div class="cell">
+                  <input name="desc[]"  type="text" placeholder="e.g., Moving labour" required autocomplete="off" value="Moving Service">
+                  <small class="error-msg"></small>
+                </div>
+              </td>
+              <td>
+                <div class="cell">
+                  <input name="days[]" type="number" step="1" min="0" required autocomplete="off" inputmode="numeric">
+                  <small class="error-msg"></small>
+                </div>
+              </td>
+              <td>
+                <div class="cell">
+                  <input name="rate[]"  type="number" step="0.01" min="0" required autocomplete="off">
+                  <small class="error-msg"></small>
+                </div>
+              </td>
               <td class="lineTotal">$0.00</td>
               <td><button type="button" class="rowDel" aria-label="Remove">&times;</button></td>
             </tr>
@@ -77,7 +120,7 @@ if (empty($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(32)); }
           <button type="submit" class="btn primary">Send Invoice</button>
         </div>
 
-        <p id="items-help" class="muted small">All math is checked again on the server. No funny business.</p>
+        <p id="items-help" class="muted small">All math is checked again on the server.</p>
       </form>
     </div>
   </div>

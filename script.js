@@ -20,9 +20,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!tbody) return;
     let totalIncl = 0;
     tbody.querySelectorAll('tr').forEach(tr => {
-      const h = parseFloat(tr.querySelector('input[name="hours[]"]')?.value || 0);
+      const d = parseInt(tr.querySelector('input[name="days[]"]')?.value || '0', 10);
       const r = parseFloat(tr.querySelector('input[name="rate[]"]')?.value || 0);
-      const line = h * r;
+      const line = (isNaN(d) ? 0 : d) * (isNaN(r) ? 0 : r);
       const target = tr.querySelector('.lineTotal');
       if (target) target.textContent = money(line);
       totalIncl += line;
@@ -49,7 +49,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Recalc + clear per-field error on change
   if (tbody) {
     tbody.addEventListener('input', e => {
       if (e.target.matches('input')) {
@@ -62,10 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
         recalc();
       }
     });
-  }
 
-  // Remove row
-  if (tbody) {
     tbody.addEventListener('click', e => {
       if (e.target.classList.contains('rowDel')) {
         const rows = tbody.querySelectorAll('tr').length;
@@ -74,7 +70,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Add row (matches your HTML structure with .cell and error placeholder)
   if (addBtn && tbody) {
     addBtn.addEventListener('click', () => {
       const tr = document.createElement('tr');
@@ -87,7 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </td>
         <td>
           <div class="cell">
-            <input name="hours[]" type="number" step="0.01" min="0" autocomplete="off" required>
+            <input name="days[]" type="number" step="1" min="0" autocomplete="off" required inputmode="numeric">
             <small class="err-msg"></small>
           </div>
         </td>
@@ -120,34 +115,40 @@ document.addEventListener('DOMContentLoaded', () => {
     const name = form.elements['your_name'];
     if (!name.value.trim()) { showErr(name, 'Please enter your name.'); bad = true; }
 
-    const invDate = form.elements['invoice_date'];
-    if (!invDate.value) { showErr(invDate, 'Please pick a date.'); bad = true; }
+    const sd = form.elements['start_date'];
+    if (!sd.value) { showErr(sd, 'Pick a start date.'); bad = true; }
+
+    const ed = form.elements['end_date'];
+    if (!ed.value) { showErr(ed, 'Pick an end date.'); bad = true; }
+
+    if (sd.value && ed.value && sd.value > ed.value) {
+      showErr(ed, 'End date must be on/after start date.'); bad = true;
+    }
 
     const hst = form.elements['your_hst'];
-    if (!hst.value.trim()) { showErr(hst, 'Please enter your HST number.'); bad = true; }
+    if (!hst.value.trim()) { showErr(hst, 'Enter your HST number.'); bad = true; }
 
     const addr = form.elements['your_address'];
-    if (!addr.value.trim()) { showErr(addr, 'Please enter your address.'); bad = true; }
+    if (!addr.value.trim()) { showErr(addr, 'Enter your address.'); bad = true; }
 
     const phone = form.elements['your_phone'];
-    if (!phone.value.trim()) { showErr(phone, 'Please enter your phone.'); bad = true; }
+    if (!phone.value.trim()) { showErr(phone, 'Enter your phone.'); bad = true; }
 
     const email = form.elements['your_email'];
     if (email.value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value)) {
-      showErr(email, 'Please enter a valid email or leave blank.'); bad = true;
+      showErr(email, 'Enter a valid email or leave blank.'); bad = true;
     }
 
-    // Items
     const rows = tbody ? Array.from(tbody.querySelectorAll('tr')) : [];
     if (rows.length === 0) { bad = true; alert('Please add at least one line item.'); }
 
     rows.forEach(tr => {
-      const d = tr.querySelector('input[name="desc[]"]');
-      const h = tr.querySelector('input[name="hours[]"]');
-      const r = tr.querySelector('input[name="rate[]"]');
-      if (!d.value.trim()) { showErr(d, 'Describe the work.'); bad = true; }
-      if (parseFloat(h.value) <= 0) { showErr(h, 'Hours must be greater than 0.'); bad = true; }
-      if (parseFloat(r.value) < 0) { showErr(r, 'Rate cannot be negative.'); bad = true; }
+      const dsc = tr.querySelector('input[name="desc[]"]');
+      const d   = parseInt(tr.querySelector('input[name="days[]"]').value || '0', 10);
+      const r   = parseFloat(tr.querySelector('input[name="rate[]"]').value || '0');
+      if (!dsc.value.trim()) { showErr(dsc, 'Describe the work.'); bad = true; }
+      if (!Number.isInteger(d) || d <= 0) { showErr(tr.querySelector('input[name="days[]"]'), 'Fill all days.'); bad = true; }
+      if (r < 0) { showErr(tr.querySelector('input[name="rate[]"]'), 'Rate cannot be negative.'); bad = true; }
     });
 
     if (bad) {
