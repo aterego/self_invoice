@@ -286,15 +286,16 @@ if (class_exists('\\Dompdf\\Dompdf')) {
 }
 
 // ---------- SEND MAIL (with CID logo + PDF attach) ----------
-$to        = array_values(array_filter(array_map('trim', preg_split('/[;,]+/', MAIL_TO_ADDRS))));
+$to     = getenv('MAIL_TO')   ?: 'talis.qualis@gmail.com';
+$from   = getenv('MAIL_FROM') ?: 'talis.qualis@gmail.com';
 $subject   = 'Invoice '.$invoice_no.' from '.$your_name.' — '.$invoice_date;
 $embeds    = is_file(LOGO_FILE) ? [['path'=>LOGO_FILE, 'cid'=>'invoice_logo', 'name'=>'logo.png']] : [];
 $attachArr = ($pdfPath && is_file($pdfPath)) ? [$pdfPath] : [];
 
-send_mail($to, $subject, $message_html, MAIL_FROM_ADDR, 'Invoices Bot', [], [], $attachArr, true, $message_text, $embeds);
+send_mail($to, $subject, $message_html, $from, 'Invoices Bot', [], [], $attachArr, true, $message_text, $embeds);
 
 if ($your_email && filter_var($your_email, FILTER_VALIDATE_EMAIL)) {
-  send_mail($your_email, 'Copy: '.$subject, $message_html, MAIL_FROM_ADDR, 'Invoices Bot', [], [], $attachArr, true, $message_text, $embeds);
+  send_mail($your_email, 'Copy: '.$subject, $message_html, $from, 'Invoices Bot', [], [], $attachArr, true, $message_text, $embeds);
 }
 
 // ---------- Thank you ----------
