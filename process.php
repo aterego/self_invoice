@@ -314,7 +314,7 @@ if (class_exists('\\Dompdf\\Dompdf')) {
       .totals .top{border-top:1px solid #ddd}
     </style></head><body><div class="wrap">
       <h1>INVOICE ' . $invoice_no . '</h1>
-      <div class="period">Invoice Dates: ' . htxt($start_date) . ' → ' . htxt($end_date) . '</div>
+      <div class="period">Billing period: ' . htxt($start_date) . ' → ' . htxt($end_date) . '</div>
 
       <table class="cols">
         <tr>
