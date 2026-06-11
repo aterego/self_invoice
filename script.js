@@ -15,14 +15,26 @@ document.addEventListener('DOMContentLoaded', () => {
   const grandEl= document.getElementById('grand');
 
   function money(n){ return '$' + (Number(n||0).toFixed(2)); }
+  function parseQty(raw) {
+    const value = parseFloat(raw || '0');
+    return Number.isFinite(value) ? value : 0;
+  }
+  function isPositiveInteger(raw) {
+    return /^\d+$/.test(raw) && parseInt(raw, 10) > 0;
+  }
+  function isPositiveHours(raw) {
+    return /^\d+(?:\.\d{1,2})?$/.test(raw) && parseFloat(raw) > 0;
+  }
 
   function recalc() {
     if (!tbody) return;
     let totalIncl = 0;
     tbody.querySelectorAll('tr').forEach(tr => {
-      const d = parseInt(tr.querySelector('input[name="days[]"]')?.value || '0', 10);
+      const dayRaw = tr.querySelector('input[name="days[]"]')?.value || '';
+      const hourRaw = tr.querySelector('input[name="hours[]"]')?.value || '';
+      const qty = dayRaw.trim() !== '' ? parseQty(dayRaw) : parseQty(hourRaw);
       const r = parseFloat(tr.querySelector('input[name="rate[]"]')?.value || 0);
-      const line = (isNaN(d) ? 0 : d) * (isNaN(r) ? 0 : r);
+      const line = qty * (isNaN(r) ? 0 : r);
       const target = tr.querySelector('.lineTotal');
       if (target) target.textContent = money(line);
       totalIncl += line;
@@ -52,6 +64,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (tbody) {
     tbody.addEventListener('input', e => {
       if (e.target.matches('input')) {
+        if (e.target.matches('input[name="days[]"], input[name="hours[]"]') && e.target.value.trim() !== '') {
+          const otherName = e.target.name === 'days[]' ? 'hours[]' : 'days[]';
+          const other = e.target.closest('tr')?.querySelector(`input[name="${otherName}"]`);
+          if (other) other.value = '';
+        }
         const wrap = e.target.closest('.field, .cell, label');
         if (wrap) {
           wrap.classList.remove('has-error');
@@ -82,7 +99,13 @@ document.addEventListener('DOMContentLoaded', () => {
         </td>
         <td>
           <div class="cell">
-            <input name="days[]" type="number" step="1" min="0" autocomplete="off" required inputmode="numeric">
+            <input name="days[]" type="number" step="1" min="0" autocomplete="off" inputmode="numeric">
+            <small class="err-msg"></small>
+          </div>
+        </td>
+        <td>
+          <div class="cell">
+            <input name="hours[]" type="number" step="0.01" min="0" autocomplete="off" inputmode="decimal">
             <small class="err-msg"></small>
           </div>
         </td>
@@ -144,10 +167,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     rows.forEach(tr => {
       const dsc = tr.querySelector('input[name="desc[]"]');
-      const d   = parseInt(tr.querySelector('input[name="days[]"]').value || '0', 10);
+      const daysInput = tr.querySelector('input[name="days[]"]');
+      const hoursInput = tr.querySelector('input[name="hours[]"]');
+      const dayRaw = daysInput.value.trim();
+      const hourRaw = hoursInput.value.trim();
       const r   = parseFloat(tr.querySelector('input[name="rate[]"]').value || '0');
       if (!dsc.value.trim()) { showErr(dsc, 'Describe the work.'); bad = true; }
-      if (!Number.isInteger(d) || d <= 0) { showErr(tr.querySelector('input[name="days[]"]'), 'Fill all days.'); bad = true; }
+      if ((dayRaw === '' && hourRaw === '') || (dayRaw !== '' && hourRaw !== '')) {
+        showErr(daysInput, 'Fill days or hours.');
+        showErr(hoursInput, 'Only one value.');
+        bad = true;
+      } else if (dayRaw !== '' && !isPositiveInteger(dayRaw)) {
+        showErr(daysInput, 'Use whole days.');
+        bad = true;
+      } else if (hourRaw !== '' && !isPositiveHours(hourRaw)) {
+        showErr(hoursInput, 'Use hours with max 2 decimals.');
+        bad = true;
+      }
       if (r < 0) { showErr(tr.querySelector('input[name="rate[]"]'), 'Rate cannot be negative.'); bad = true; }
     });
 

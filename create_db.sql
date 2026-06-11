@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS invoice_items (
   line_no       SMALLINT UNSIGNED NOT NULL,
   description   VARCHAR(255) NOT NULL,
   days          INT UNSIGNED NOT NULL,
+  hours         DECIMAL(10,2) NULL,
   rate_incl_hst DECIMAL(10,2) NOT NULL,
   amount_incl   DECIMAL(12,2) NOT NULL,
   KEY idx_invoice_id (invoice_id),

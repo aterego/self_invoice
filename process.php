@@ -34,6 +34,7 @@ if (
 
 // Rate limit
 $ip = $_SERVER['REMOTE_ADDR'] ?? 'ip';
+$ua = substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255);
 $rlDir = __DIR__ . '/logs/rl';
 if (!is_dir($rlDir)) {
   @mkdir($rlDir, 0755, true);
@@ -68,6 +69,7 @@ $your_email   = trim((string)($_POST['your_email'] ?? ''));
 
 $desc  = $_POST['desc']  ?? [];
 $daysA = $_POST['days']  ?? [];
+$hoursA = $_POST['hours'] ?? [];
 $rate  = $_POST['rate']  ?? [];
 
 if (!$your_name || !$start_date || !$end_date || !$your_hst || !$your_address || !$your_phone) {
@@ -82,22 +84,51 @@ if ($start_date > $end_date) {
   http_response_code(422);
   exit('End date before start date.');
 }
-if (!is_array($desc) || !is_array($daysA) || !is_array($rate) || count($desc) === 0) {
+if (!is_array($desc) || !is_array($daysA) || !is_array($hoursA) || !is_array($rate) || count($desc) === 0) {
   http_response_code(422);
   exit('Need at least one line item.');
 }
 
 // ---------- MATH ----------
+function parse_positive_hours($value): ?float
+{
+  $raw = trim((string)$value);
+  if ($raw === '' || !preg_match('~^\d+(?:\.\d{1,2})?$~', $raw)) {
+    return null;
+  }
+  $hours = (float)$raw;
+  return $hours > 0 ? $hours : null;
+}
+
 $items = [];
 $total_incl = 0.0;
 for ($i = 0; $i < count($desc); $i++) {
   $dsc = trim((string)($desc[$i] ?? ''));
-  $d   = (int)($daysA[$i] ?? 0);
+  $dayRaw = trim((string)($daysA[$i] ?? ''));
+  $hourRaw = trim((string)($hoursA[$i] ?? ''));
+  $d = $dayRaw !== '' && preg_match('~^\d+$~', $dayRaw) ? (int)$dayRaw : 0;
+  $h = parse_positive_hours($hourRaw);
   $r   = (float)($rate[$i] ?? 0);
-  if ($dsc === '' || $d <= 0 || $r < 0) continue;
+  $hasDays = $dayRaw !== '';
+  $hasHours = $hourRaw !== '';
 
-  $line_incl = round($d * $r, 2);
-  $items[] = ['desc' => $dsc, 'days' => $d, 'rate_incl' => $r, 'line_incl' => $line_incl];
+  if ($dsc === '' || $r < 0 || $hasDays === $hasHours || ($hasDays && $d <= 0) || ($hasHours && $h === null)) {
+    http_response_code(422);
+    exit('Invalid line item. Use either days or hours, not both.');
+  }
+
+  $unit = $hasDays ? 'days' : 'hours';
+  $qty = $hasDays ? (float)$d : (float)$h;
+  $line_incl = round($qty * $r, 2);
+  $items[] = [
+    'desc' => $dsc,
+    'days' => $hasDays ? $d : 0,
+    'hours' => $hasHours ? $h : null,
+    'unit' => $unit,
+    'qty' => $qty,
+    'rate_incl' => $r,
+    'line_incl' => $line_incl
+  ];
   $total_incl += $line_incl;
 }
 if (empty($items)) {
@@ -110,8 +141,26 @@ $hst_amt  = round($total_incl - $subtotal, 2);
 
 // ---------- DB SAVE ----------
 $mysqli = db();
-$mysqli->begin_transaction();
+function ensure_invoice_items_hours_column(mysqli $mysqli): void
+{
+  $res = $mysqli->query("SHOW COLUMNS FROM invoice_items LIKE 'hours'");
+  if (!$res) {
+    throw new RuntimeException('Could not inspect invoice_items hours column: ' . $mysqli->error);
+  }
+  $exists = $res && $res->num_rows > 0;
+  $res->free();
+  if (!$exists) {
+    if (!$mysqli->query("ALTER TABLE invoice_items ADD COLUMN hours DECIMAL(10,2) NULL AFTER days")) {
+      throw new RuntimeException('Could not add invoice_items hours column: ' . $mysqli->error);
+    }
+  }
+}
+
+$txStarted = false;
 try {
+  ensure_invoice_items_hours_column($mysqli);
+  $mysqli->begin_transaction();
+  $txStarted = true;
 
   // 1) Always have a non-null placeholder invoice number
   $tmpInvNo = 'PENDING';
@@ -176,18 +225,19 @@ try {
 
   $stmt = $mysqli->prepare("
   INSERT INTO invoice_items
-    (invoice_id, line_no, description, days, rate_incl_hst, amount_incl)
-  VALUES (?,?,?,?,?,?)
+    (invoice_id, line_no, description, days, hours, rate_incl_hst, amount_incl)
+  VALUES (?,?,?,?,?,?,?)
 ");
   $line_no = 0;
   foreach ($items as $it) {
     $line_no++;
     $descVar = $it['desc'];           // make sure it's a variable
     $daysVar = (int)$it['days'];
+    $hoursVar = $it['hours'] === null ? null : (float)$it['hours'];
     $rateVar = (float)$it['rate_incl'];
     $amtVar  = (float)$it['line_incl'];
 
-    $stmt->bind_param('iisidd', $invoice_id, $line_no, $descVar, $daysVar, $rateVar, $amtVar);
+    $stmt->bind_param('iisiddd', $invoice_id, $line_no, $descVar, $daysVar, $hoursVar, $rateVar, $amtVar);
     $stmt->execute();
   }
   $stmt->close();
@@ -196,7 +246,9 @@ try {
 
   $mysqli->commit();
 } catch (Throwable $e) {
-  $mysqli->rollback();
+  if ($txStarted) {
+    $mysqli->rollback();
+  }
   @mkdir(__DIR__ . '/logs', 0755, true);
   @file_put_contents(
     __DIR__ . '/logs/db.log',
@@ -216,12 +268,23 @@ function money2($n)
 {
   return '$' . number_format((float)$n, 2);
 }
+function qty2($n)
+{
+  return rtrim(rtrim(number_format((float)$n, 2, '.', ''), '0'), '.');
+}
+function item_qty_label(array $it): string
+{
+  if (($it['unit'] ?? 'days') === 'hours') {
+    return qty2($it['hours']) . ' Hours';
+  }
+  return (int)$it['days'] . ' Days';
+}
 
 $rows_html = '';
 foreach ($items as $it) {
   $rows_html .= '<tr>' .
     '<td style="padding:6px;border-top:1px solid #eee;">' . htxt($it['desc']) . '</td>' .
-    '<td style="padding:6px;border-top:1px solid #eee;text-align:right;">' . (int)$it['days'] . '</td>' .
+    '<td style="padding:6px;border-top:1px solid #eee;text-align:right;">' . htxt(item_qty_label($it)) . '</td>' .
     '<td style="padding:6px;border-top:1px solid #eee;text-align:right;">' . money2($it['rate_incl']) . '</td>' .
     '<td style="padding:6px;border-top:1px solid #eee;text-align:right;">' . money2($it['line_incl']) . '</td>' .
     '</tr>';
@@ -259,7 +322,7 @@ $message_html = '
       <thead>
         <tr>
           <th style="text-align:left;border-bottom:2px solid #111;padding:6px">Description</th>
-          <th style="text-align:right;border-bottom:2px solid #111;padding:6px">Days</th>
+          <th style="text-align:right;border-bottom:2px solid #111;padding:6px">Quantity</th>
           <th style="text-align:right;border-bottom:2px solid #111;padding:6px">Rate (incl HST)</th>
           <th style="text-align:right;border-bottom:2px solid #111;padding:6px">Amount</th>
         </tr>
@@ -283,7 +346,7 @@ $message_text =
   "\nBill To: " . BILL_TO_NAME . "\nAddress: " . BILL_TO_ADDRESS . "\nPhone: " . BILL_TO_PHONE . "\n" .
   "Items:\n";
 foreach ($items as $it) {
-  $message_text .= "- {$it['desc']} | Days: " . (int)$it['days'] . " | Rate(incl): " . money2($it['rate_incl']) . " | Amount: " . money2($it['line_incl']) . "\n";
+  $message_text .= "- {$it['desc']} | Quantity: " . item_qty_label($it) . " | Rate(incl): " . money2($it['rate_incl']) . " | Amount: " . money2($it['line_incl']) . "\n";
 }
 $message_text .= "\nSubtotal: " . money2($subtotal) . "\nHST(13%): " . money2($hst_amt) . "\nTotal: " . money2($total_incl) . "\n";
 
@@ -339,13 +402,13 @@ if (class_exists('\\Dompdf\\Dompdf')) {
       <h3>Items</h3>
       <table>
         <thead><tr>
-          <th>Description</th><th style="text-align:right">Days</th><th style="text-align:right">Rate (incl HST)</th><th style="text-align:right">Amount</th>
+          <th>Description</th><th style="text-align:right">Quantity</th><th style="text-align:right">Rate (incl HST)</th><th style="text-align:right">Amount</th>
         </tr></thead><tbody>';
 
   foreach ($items as $it) {
     $pdf_html .= '<tr>' .
       '<td>' . htxt($it['desc']) . '</td>' .
-      '<td style="text-align:right">' . (int)$it['days'] . '</td>' .
+      '<td style="text-align:right">' . htxt(item_qty_label($it)) . '</td>' .
       '<td style="text-align:right">' . money2($it['rate_incl']) . '</td>' .
       '<td style="text-align:right">' . money2($it['line_incl']) . '</td>' .
       '</tr>';

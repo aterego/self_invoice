@@ -16,7 +16,7 @@ if (empty($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(32)); }
         <img src="logo.png" alt="Logo" class="logo" onerror="this.style.display='none'">
       </div>      
       <h1>Self-Invoice</h1>
-      <p class="muted">Rates are <b>per day</b> and <b>tax-inclusive</b>. We’ll split out Ontario HST (13%).</p>
+      <p class="muted">Rates are <b>per day or hour</b> and <b>tax-inclusive</b>. We'll split out Ontario HST (13%).</p>
 
       <form id="invoiceForm" class="grid" method="post" action="process.php" autocomplete="off" novalidate>
         <!-- Bot guards -->
@@ -68,15 +68,16 @@ if (empty($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(32)); }
           </label>
         </div>
 
-        <h3>Line Items (per day, incl. HST)</h3>
+        <h3>Line Items (incl. HST)</h3>
 
         <table class="items" aria-describedby="items-help">
           <thead>
             <tr>
-              <th style="width:45%">Description</th>
-              <th style="width:15%">Days</th>
+              <th style="width:38%">Description</th>
+              <th style="width:12%">Days</th>
+              <th style="width:12%">Hours (hr)</th>
               <th style="width:20%">Rate (incl. HST)</th>
-              <th style="width:20%">Amount</th>
+              <th style="width:18%">Amount</th>
               <th></th>
             </tr>
           </thead>
@@ -90,7 +91,13 @@ if (empty($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(32)); }
               </td>
               <td>
                 <div class="cell">
-                  <input name="days[]" type="number" step="1" min="0" required autocomplete="off" inputmode="numeric">
+                  <input name="days[]" type="number" step="1" min="0" autocomplete="off" inputmode="numeric">
+                  <small class="error-msg"></small>
+                </div>
+              </td>
+              <td>
+                <div class="cell">
+                  <input name="hours[]" type="number" step="0.01" min="0" autocomplete="off" inputmode="decimal">
                   <small class="error-msg"></small>
                 </div>
               </td>
