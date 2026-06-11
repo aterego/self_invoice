@@ -272,6 +272,13 @@ function qty2($n)
 {
   return rtrim(rtrim(number_format((float)$n, 2, '.', ''), '0'), '.');
 }
+function item_qty_value(array $it): string
+{
+  if (($it['unit'] ?? 'days') === 'hours') {
+    return qty2($it['hours']);
+  }
+  return (string)(int)$it['days'];
+}
 function item_qty_label(array $it): string
 {
   if (($it['unit'] ?? 'days') === 'hours') {
@@ -279,12 +286,22 @@ function item_qty_label(array $it): string
   }
   return (int)$it['days'] . ' Days';
 }
+function items_qty_header(array $items): string
+{
+  $units = array_unique(array_map(static fn($it) => $it['unit'] ?? 'days', $items));
+  if (count($units) === 1) {
+    return reset($units) === 'hours' ? 'Hours' : 'Days';
+  }
+  return 'Days / Hours';
+}
+$qty_header = items_qty_header($items);
 
 $rows_html = '';
 foreach ($items as $it) {
+  $qty_value = $qty_header === 'Days / Hours' ? item_qty_label($it) : item_qty_value($it);
   $rows_html .= '<tr>' .
     '<td style="padding:6px;border-top:1px solid #eee;">' . htxt($it['desc']) . '</td>' .
-    '<td style="padding:6px;border-top:1px solid #eee;text-align:right;">' . htxt(item_qty_label($it)) . '</td>' .
+    '<td style="padding:6px;border-top:1px solid #eee;text-align:right;">' . htxt($qty_value) . '</td>' .
     '<td style="padding:6px;border-top:1px solid #eee;text-align:right;">' . money2($it['rate_incl']) . '</td>' .
     '<td style="padding:6px;border-top:1px solid #eee;text-align:right;">' . money2($it['line_incl']) . '</td>' .
     '</tr>';
@@ -322,7 +339,7 @@ $message_html = '
       <thead>
         <tr>
           <th style="text-align:left;border-bottom:2px solid #111;padding:6px">Description</th>
-          <th style="text-align:right;border-bottom:2px solid #111;padding:6px">Quantity</th>
+          <th style="text-align:right;border-bottom:2px solid #111;padding:6px">' . htxt($qty_header) . '</th>
           <th style="text-align:right;border-bottom:2px solid #111;padding:6px">Rate (incl HST)</th>
           <th style="text-align:right;border-bottom:2px solid #111;padding:6px">Amount</th>
         </tr>
@@ -346,7 +363,8 @@ $message_text =
   "\nBill To: " . BILL_TO_NAME . "\nAddress: " . BILL_TO_ADDRESS . "\nPhone: " . BILL_TO_PHONE . "\n" .
   "Items:\n";
 foreach ($items as $it) {
-  $message_text .= "- {$it['desc']} | Quantity: " . item_qty_label($it) . " | Rate(incl): " . money2($it['rate_incl']) . " | Amount: " . money2($it['line_incl']) . "\n";
+  $qty_text = $qty_header === 'Days / Hours' ? item_qty_label($it) : item_qty_value($it);
+  $message_text .= "- {$it['desc']} | {$qty_header}: " . $qty_text . " | Rate(incl): " . money2($it['rate_incl']) . " | Amount: " . money2($it['line_incl']) . "\n";
 }
 $message_text .= "\nSubtotal: " . money2($subtotal) . "\nHST(13%): " . money2($hst_amt) . "\nTotal: " . money2($total_incl) . "\n";
 
@@ -402,13 +420,14 @@ if (class_exists('\\Dompdf\\Dompdf')) {
       <h3>Items</h3>
       <table>
         <thead><tr>
-          <th>Description</th><th style="text-align:right">Quantity</th><th style="text-align:right">Rate (incl HST)</th><th style="text-align:right">Amount</th>
+          <th>Description</th><th style="text-align:right">' . htxt($qty_header) . '</th><th style="text-align:right">Rate (incl HST)</th><th style="text-align:right">Amount</th>
         </tr></thead><tbody>';
 
   foreach ($items as $it) {
+    $qty_value = $qty_header === 'Days / Hours' ? item_qty_label($it) : item_qty_value($it);
     $pdf_html .= '<tr>' .
       '<td>' . htxt($it['desc']) . '</td>' .
-      '<td style="text-align:right">' . htxt(item_qty_label($it)) . '</td>' .
+      '<td style="text-align:right">' . htxt($qty_value) . '</td>' .
       '<td style="text-align:right">' . money2($it['rate_incl']) . '</td>' .
       '<td style="text-align:right">' . money2($it['line_incl']) . '</td>' .
       '</tr>';
