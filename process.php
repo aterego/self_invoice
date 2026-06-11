@@ -1,4 +1,28 @@
 <?php
+// TEMP DEBUG: remove this block after the production 500 error is fixed.
+error_reporting(E_ALL);
+ini_set('display_errors', '1');
+ini_set('display_startup_errors', '1');
+ini_set('log_errors', '1');
+@mkdir(__DIR__ . '/logs', 0755, true);
+ini_set('error_log', __DIR__ . '/logs/php-error.log');
+if (function_exists('mysqli_report')) {
+  mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+}
+register_shutdown_function(function () {
+  $error = error_get_last();
+  $fatalTypes = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR];
+  if ($error && in_array($error['type'], $fatalTypes, true)) {
+    if (!headers_sent()) {
+      http_response_code(500);
+      header('Content-Type: text/plain; charset=utf-8');
+    }
+    echo "\n\nFatal error:\n";
+    echo $error['message'] . "\n";
+    echo $error['file'] . ':' . $error['line'] . "\n";
+  }
+});
+
 require __DIR__ . '/config.php';
 require __DIR__ . '/mailer.php';
 
@@ -90,7 +114,7 @@ if (!is_array($desc) || !is_array($daysA) || !is_array($hoursA) || !is_array($ra
 }
 
 // ---------- MATH ----------
-function parse_positive_hours($value): ?float
+function parse_positive_hours($value)
 {
   $raw = trim((string)$value);
   if ($raw === '' || !preg_match('~^\d+(?:\.\d{1,2})?$~', $raw)) {
@@ -141,7 +165,7 @@ $hst_amt  = round($total_incl - $subtotal, 2);
 
 // ---------- DB SAVE ----------
 $mysqli = db();
-function ensure_invoice_items_hours_column(mysqli $mysqli): void
+function ensure_invoice_items_hours_column(mysqli $mysqli)
 {
   $res = $mysqli->query("SHOW COLUMNS FROM invoice_items LIKE 'hours'");
   if (!$res) {
@@ -288,7 +312,9 @@ function item_qty_label(array $it): string
 }
 function items_qty_header(array $items): string
 {
-  $units = array_unique(array_map(static fn($it) => $it['unit'] ?? 'days', $items));
+  $units = array_unique(array_map(function ($it) {
+    return isset($it['unit']) ? $it['unit'] : 'days';
+  }, $items));
   if (count($units) === 1) {
     return reset($units) === 'hours' ? 'Hours' : 'Days';
   }
