@@ -117,11 +117,27 @@ if (!is_array($desc) || !is_array($daysA) || !is_array($hoursA) || !is_array($ra
 function parse_positive_hours($value)
 {
   $raw = trim((string)$value);
-  if ($raw === '' || !preg_match('~^\d+(?:\.\d{1,2})?$~', $raw)) {
-    return null;
+  if (preg_match('~^\d+$~', $raw)) {
+    $hours = (int)$raw;
+    return $hours > 0 ? [
+      'display' => (string)$hours,
+      'db_value' => (float)$hours,
+      'qty' => (float)$hours
+    ] : null;
   }
-  $hours = (float)$raw;
-  return $hours > 0 ? $hours : null;
+  if (preg_match('~^(\d+)[\.:,](\d{2})$~', $raw, $m)) {
+    $hours = (int)$m[1];
+    $minutes = (int)$m[2];
+    if ($minutes > 59 || ($hours === 0 && $minutes === 0)) {
+      return null;
+    }
+    return [
+      'display' => $hours . ':' . str_pad((string)$minutes, 2, '0', STR_PAD_LEFT),
+      'db_value' => (float)($hours . '.' . str_pad((string)$minutes, 2, '0', STR_PAD_LEFT)),
+      'qty' => $hours + ($minutes / 60)
+    ];
+  }
+  return null;
 }
 
 $items = [];
@@ -142,12 +158,13 @@ for ($i = 0; $i < count($desc); $i++) {
   }
 
   $unit = $hasDays ? 'days' : 'hours';
-  $qty = $hasDays ? (float)$d : (float)$h;
+  $qty = $hasDays ? (float)$d : (float)$h['qty'];
   $line_incl = round($qty * $r, 2);
   $items[] = [
     'desc' => $dsc,
     'days' => $hasDays ? $d : 0,
-    'hours' => $hasHours ? $h : null,
+    'hours' => $hasHours ? $h['db_value'] : null,
+    'hours_display' => $hasHours ? $h['display'] : null,
     'unit' => $unit,
     'qty' => $qty,
     'rate_incl' => $r,
@@ -299,14 +316,14 @@ function qty2($n)
 function item_qty_value(array $it): string
 {
   if (($it['unit'] ?? 'days') === 'hours') {
-    return qty2($it['hours']);
+    return isset($it['hours_display']) ? $it['hours_display'] : qty2($it['hours']);
   }
   return (string)(int)$it['days'];
 }
 function item_qty_label(array $it): string
 {
   if (($it['unit'] ?? 'days') === 'hours') {
-    return qty2($it['hours']) . ' Hours';
+    return (isset($it['hours_display']) ? $it['hours_display'] : qty2($it['hours'])) . ' Hours';
   }
   return (int)$it['days'] . ' Days';
 }

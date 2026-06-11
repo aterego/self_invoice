@@ -19,11 +19,27 @@ document.addEventListener('DOMContentLoaded', () => {
     const value = parseFloat(raw || '0');
     return Number.isFinite(value) ? value : 0;
   }
+  function parseHours(raw) {
+    const value = String(raw || '').trim();
+    if (/^\d+$/.test(value)) {
+      const hours = parseInt(value, 10);
+      return hours > 0 ? { display: String(hours), qty: hours } : null;
+    }
+    const match = value.match(/^(\d+)[.:,](\d{2})$/);
+    if (!match) return null;
+    const hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    if (minutes > 59 || (hours === 0 && minutes === 0)) return null;
+    return {
+      display: hours + ':' + ('0' + minutes).slice(-2),
+      qty: hours + (minutes / 60)
+    };
+  }
   function isPositiveInteger(raw) {
     return /^\d+$/.test(raw) && parseInt(raw, 10) > 0;
   }
   function isPositiveHours(raw) {
-    return /^\d+(?:\.\d{1,2})?$/.test(raw) && parseFloat(raw) > 0;
+    return parseHours(raw) !== null;
   }
 
   function recalc() {
@@ -32,13 +48,15 @@ document.addEventListener('DOMContentLoaded', () => {
     tbody.querySelectorAll('tr').forEach(tr => {
       const dayRaw = tr.querySelector('input[name="days[]"]')?.value || '';
       const hourRaw = tr.querySelector('input[name="hours[]"]')?.value || '';
-      const qty = dayRaw.trim() !== '' ? parseQty(dayRaw) : parseQty(hourRaw);
+      const hours = parseHours(hourRaw);
+      const qty = dayRaw.trim() !== '' ? parseQty(dayRaw) : (hours ? hours.qty : 0);
       const r = parseFloat(tr.querySelector('input[name="rate[]"]')?.value || 0);
       const line = qty * (isNaN(r) ? 0 : r);
       const target = tr.querySelector('.lineTotal');
       if (target) target.textContent = money(line);
       totalIncl += line;
     });
+
     const subtotal = totalIncl / 1.13;
     const hst = totalIncl - subtotal;
     if (subEl)  subEl.textContent  = money(subtotal);
@@ -85,6 +103,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (rows > 1) { e.target.closest('tr').remove(); recalc(); }
       }
     });
+
+    tbody.addEventListener('blur', e => {
+      if (e.target.matches('input[name="hours[]"]')) {
+        const parsed = parseHours(e.target.value);
+        if (parsed) {
+          e.target.value = parsed.display;
+          recalc();
+        }
+      }
+    }, true);
   }
 
   if (addBtn && tbody) {
@@ -105,7 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </td>
         <td>
           <div class="cell">
-            <input name="hours[]" type="number" step="0.01" min="0" autocomplete="off" inputmode="decimal">
+            <input name="hours[]" type="text" autocomplete="off" inputmode="decimal" placeholder="1:35">
             <small class="err-msg"></small>
           </div>
         </td>
@@ -181,8 +209,10 @@ document.addEventListener('DOMContentLoaded', () => {
         showErr(daysInput, 'Use whole days.');
         bad = true;
       } else if (hourRaw !== '' && !isPositiveHours(hourRaw)) {
-        showErr(hoursInput, 'Use hours with max 2 decimals.');
+        showErr(hoursInput, 'Use H:MM, minutes 00-59.');
         bad = true;
+      } else if (hourRaw !== '') {
+        hoursInput.value = parseHours(hourRaw).display;
       }
       if (r < 0) { showErr(tr.querySelector('input[name="rate[]"]'), 'Rate cannot be negative.'); bad = true; }
     });
