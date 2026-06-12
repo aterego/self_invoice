@@ -133,7 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </td>
         <td>
           <div class="cell">
-            <input name="hours[]" type="text" autocomplete="off" inputmode="decimal" placeholder="1:35">
+            <input name="hours[]" type="text" autocomplete="off" inputmode="decimal" placeholder="h:mm">
             <small class="err-msg"></small>
           </div>
         </td>

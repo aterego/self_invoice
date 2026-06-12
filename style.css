@@ -12,12 +12,15 @@ h3{margin:18px 0 8px}
 @media (max-width:820px){.grid .row{grid-template-columns:1fr}}
 label{display:flex;flex-direction:column;gap:6px;font-weight:600}
 input{padding:10px 12px;border:1px solid #e5e7eb;border-radius:8px;outline:none}
+input::placeholder{color:#9ca3af;opacity:.55}
+input[name="hours[]"]:focus::placeholder{color:transparent}
 input:focus{border-color:#94a3b8}
 .sr-only{position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden}
 
 table.items{width:100%;border-collapse:collapse;margin-top:6px}
 table.items th, table.items td{padding:6px;border-bottom:1px solid #e5e7eb}
 table.items input{width:100%}
+.lineTotal{vertical-align:top;line-height:40px;text-align:center;white-space:nowrap}
 .rowDel{border:0;background:#fee2e2;color:#991b1b;border-radius:8px;padding:6px 10px;cursor:pointer}
 .rowDel:hover{background:#fecaca}
 

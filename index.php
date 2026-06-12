@@ -97,7 +97,7 @@ if (empty($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(32)); }
               </td>
               <td>
                 <div class="cell">
-                  <input name="hours[]" type="text" autocomplete="off" inputmode="decimal" placeholder="1:35">
+                  <input name="hours[]" type="text" autocomplete="off" inputmode="decimal" placeholder="h:mm">
                   <small class="error-msg"></small>
                 </div>
               </td>
